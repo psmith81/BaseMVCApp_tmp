@@ -10,6 +10,8 @@ using Microsoft.AspNet.Identity.Owin;
 using Microsoft.Owin.Security;
 using BaseMVCApp_tmp.Models;
 using System.Text.RegularExpressions;
+using System.Collections.Generic;
+using System.Net;
 
 namespace BaseMVCApp_tmp.Controllers
 {
@@ -38,6 +40,129 @@ namespace BaseMVCApp_tmp.Controllers
             {
                 _userManager = value;
             }
+        }
+
+        //
+        // GET: /Account/ListRoles
+        [Authorize(Roles = "Administrator")]
+        public ActionResult ListRoles()
+        {
+            var db = new ApplicationDbContext();
+            var model = new List<RoleViewModel>();
+            foreach (var item in db.Roles)
+            {
+                model.Add(new RoleViewModel { RoleId = item.Id, RoleName = item.Name });
+            }
+            return View(model);
+        }
+
+        //
+        // GET: /Account/AssignUserRole
+        [Authorize(Roles = "Administrator")]
+        public ActionResult AssignUserRole(string roleId)
+        {
+            ViewBag.Message = (string)TempData["ListError"];
+            var db = new ApplicationDbContext();
+            var role = db.Roles.Find(roleId);
+
+            if (role != null)
+            {
+                var model = new UserRoleViewModel() { RoleId = role.Id, RoleName = role.Name };
+                var userList = new List<ApplicationUser>();
+                foreach (var user in db.Users)
+                {
+                    if (!UserManager.IsInRole(user.Id, model.RoleName))
+                    {
+                        userList.Add(user);
+                    }
+                }
+                model.Users = new MultiSelectList(userList.OrderBy(u => u.UserName), "Id", "UserName");
+                return View(model);
+            }
+            return new HttpStatusCodeResult(HttpStatusCode.BadRequest);
+        }
+
+        //
+        // POST: /Account/AssignUserRole
+        [HttpPost]
+        [Authorize(Roles = "Administrator")]
+        [ValidateAntiForgeryToken]
+        public ActionResult AssignUserRole(UserRoleViewModel model)
+        {
+            if(ModelState.IsValid)
+            {
+                // check the model state - if its's valid continue.
+                var db = new ApplicationDbContext();
+
+                if (model.SelectedUsers != null)
+                {
+                    foreach (string userid in model.SelectedUsers)
+                    {
+                        var user = db.Users.Find(userid);
+                        UserManager.AddToRole(user.Id, model.RoleName);
+                    }
+                }
+                else
+                {
+                    TempData["ListError"] = "You must select at least one user from the list.";
+                    return RedirectToAction("AssignUserRole", new { roleid = model.RoleId });
+                }
+                return RedirectToAction("ListRoles");
+            }
+            return View(model);
+        }
+
+        //
+        // GET: /Account/UnassignUserRole
+        [Authorize(Roles = "Administrator")]
+        public ActionResult UnassignUserRole(string roleid)
+        {
+            ViewBag.Message = (string)TempData["ListError"];
+            var db = new ApplicationDbContext();
+            var role = db.Roles.Find(roleid);
+
+            if (role != null)
+            {
+                var model = new UserRoleViewModel() { RoleId = role.Id, RoleName = role.Name };
+                var userList = new List<ApplicationUser>();
+                foreach (var user in db.Users)
+                {
+                    if (UserManager.IsInRole(user.Id, model.RoleName))
+                    {
+                        userList.Add(user);
+                    }
+                }
+                model.Users = new MultiSelectList(userList.OrderBy(u => u.UserName), "Id", "UserName");
+                return View(model);
+            }
+            return new HttpStatusCodeResult(HttpStatusCode.BadRequest);
+        }
+
+        //
+        // POST: /Account/UnassignUserRole
+        [HttpPost]
+        [Authorize(Roles = "Administrator")]
+        [ValidateAntiForgeryToken]
+        public ActionResult UnassignUserRole(UserRoleViewModel model)
+        {
+            if (ModelState.IsValid)         // check the model state - if its's valid continue.
+            {
+                var db = new ApplicationDbContext();
+                if (model.SelectedUsers != null)
+                {
+                    foreach (string userid in model.SelectedUsers)
+                    {
+                        UserManager.RemoveFromRole(userid, model.RoleName);
+                    }
+                }
+                else
+                {
+                    TempData["ListError"] = "You must select at least one user from the list.";
+                    return RedirectToAction("UnassignUserRole", new { roleid = model.RoleId });
+                }
+                return RedirectToAction("ListRoles");
+            }
+            return View(model);
         }
 
         //
